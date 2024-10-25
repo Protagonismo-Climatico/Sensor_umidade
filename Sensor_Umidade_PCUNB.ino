@@ -1,80 +1,153 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
+#define UMIDADE_MIN 760 // Valor mínimo do sensor
+#define UMIDADE_MAX 880 // Valor máximo do sensor
+#define MAX_MEDIDAS_SENSOR 10
+#define INTERVALO 100 // 100 ms
+// Definição dos pinos
+#define PINO_SENSOR_UMIDADE A0
+#define PINO_RELE 7
+
+int lerUmidadeSolo();
+int obterMediaMedidasSensor();
+int simularSensor();
+void atualizarValorUmidade();
+void atualizarEstadoUmidade();
 
 // Endereço do LCD I2C e tamanho do display (16 colunas e 2 linhas)
-LiquidCrystal_I2C lcd(0x27, 16, 2);  // O endereço do I2C pode ser 0x27 ou 0x3F, dependendo do módulo
+LiquidCrystal_I2C lcd(0x27, 16, 2); // O endereço do I2C pode ser 0x27 ou 0x3F, dependendo do módulo
 
-// Define o 100% e o 0% de umidade
-const int umidadeMax = 760;   // Valor mínimo do sensor
-const int umidadeMin = 880; // Valor máximo do sensor
-char buffer[16]; 
-char status[16];
+unsigned long tempoAnterior = 0;
+int tempoDecorrido = 0;
 
-void setup() {
+int umidade;
+int umidadeAnterior = -1;
+
+char estado[10] = "         "; // Espaço para armazenar estado
+
+
+void setup()
+{
   // Inicializa a comunicação serial
   Serial.begin(9600);
-  
+
+  // Configura pino do role
+  pinMode(PINO_RELE, OUTPUT);
+
   // Inicializa o LCD com o número de colunas e linhas
   lcd.init();
-  
+
   // Define o brilho do LCD (opcional, dependendo do módulo)
   lcd.backlight();
-  
 
+  lcd.setCursor(0, 0);
+  lcd.print("Umidade: ");
+  lcd.setCursor(0, 1);
+  lcd.print("Nivel: ");
 }
 
-void loop() {
-  // Lê o valor do sensor conectado ao pino analógico 0
-  int valorSensor = analogRead(0);
-  
-  // Converte o valor do sensor para porcentagem
-  int porcentagem = map(valorSensor, umidadeMin, umidadeMax, 0, 100);
-  int umidade = constrain(porcentagem, 0, 100);
-  
-  // Formata o texto 
-  sprintf(buffer, "Umidade: %d%%", umidade);  // Formata o texto
+void loop()
+{
 
-  // Imprime o valor da umidade no monitor serial
-  Serial.println(umidade);
-  Serial.println(valorSensor);
-  Serial.println();
-  // Move o cursor para a primeira coluna da primeira linha
-  lcd.setCursor(0, 0); 
-  
-  // Limpa a linha do LCD com espaços
-  lcd.print("                "); // Limpa a linha (16 espaços)
-  
-  // Move o cursor de volta para a primeira coluna da primeira linha
-  lcd.setCursor(0, 0);
+  umidade = simularSensor();
 
-  
-  // Exibe a string formatada no LCD
-  lcd.print(buffer);
+  // Só atualiza se a umidade mudou
+  if (umidade != umidadeAnterior)
+  {
+    // Atualiza a primeira linha com a umidade
+    atualizarValorUmidade();
+    atualizarEstadoUmidade();
 
-  lcd.setCursor(0, 1); // Move o cursor para a primeira coluna da segunda linha
-  
-  
-  if (umidade < 30) {
-    sprintf(status, "Estado: seco :(");  // Formata o texto
-  }
-  else if (umidade > 80) {
-    sprintf(status, "Estado: alagado :(");  // Formata o texto
-  }
-  else {
-    sprintf(status, "Estado: umido :)");  // Formata o texto
+    // Armazena o valor atual da umidade
+    umidadeAnterior = umidade;
+
+    if (umidade >= 30)
+    {
+      digitalWrite(PINO_RELE, LOW);
+    }
+    else
+    {
+      digitalWrite(PINO_RELE, HIGH);
+    }
   }
 
-  lcd.setCursor(0, 1); // Move o cursor para a nona coluna da primeira linha
-  
-  // Limpa a linha do LCD com espaços
-  lcd.print("                "); // Limpa a linha (16 espaços)
-  
-    // Move o cursor de volta para a primeira coluna da primeira linha
-  lcd.setCursor(0, 1);
-
-  // Exibe o status do solo
-  lcd.print(status);
-
-  // Aguarda 500 milissegundos antes de atualizar o display
   delay(500);
+}
+
+void atualizarValorUmidade()
+{
+  char buffer[4];
+  sprintf(buffer, "%d%%", umidade); // Formata o texto
+  lcd.setCursor(11, 0);
+  lcd.print("        ");
+  lcd.setCursor(11, 0);
+  lcd.print(buffer);
+}
+
+void atualizarEstadoUmidade()
+{
+  char novoEstado[10]; // Variável para armazenar o novo estado
+  lcd.setCursor(7, 1); // Move o cursor para a posição do estado
+
+  if (umidade < 30)
+  {
+    strcpy(novoEstado, "Seco :(");
+  }
+  else if (umidade > 80)
+  {
+    strcpy(novoEstado, "Alagado!");
+  }
+  else
+  {
+    strcpy(novoEstado, "Umido :D");
+  }
+
+  // Atualiza o LCD apenas se o estado mudou
+  if (strcmp(novoEstado, estado) != 0)
+  {
+    strcpy(estado, novoEstado); // Atualiza o estado anterior
+    lcd.print("         "); // Limpa a linha antes de imprimir o novo estado
+    lcd.setCursor(7, 1); // Move o cursor para a posição do estado
+    lcd.print(estado); // Imprime o novo estado
+  }
+}
+
+int lerUmidadeSolo()
+{
+  // Lê o valor do sensor conectado ao pino analógico 0
+  int mediaMedidas = obterMediaMedidasSensor();
+  // Converte o valor do sensor para porcentagem
+  int porcentagem = map(mediaMedidas, UMIDADE_MIN, UMIDADE_MAX, 0, 100);
+  return constrain(porcentagem, 0, 100);
+}
+
+int obterMediaMedidasSensor()
+{
+  int mediaMedidas = 0;
+
+  for (int i = 0; i < MAX_MEDIDAS_SENSOR; i++)
+  {
+    int valorSensor = analogRead(PINO_SENSOR_UMIDADE);
+    delay(100);
+    mediaMedidas += valorSensor;
+  }
+  mediaMedidas /= MAX_MEDIDAS_SENSOR;
+  return mediaMedidas;
+}
+
+int simularSensor()
+{
+  unsigned long tempoAtual = millis();
+
+  if (tempoAtual - tempoAnterior >= INTERVALO)
+  {
+    tempoAnterior = tempoAtual; // Atualiza o tempo anterior
+    tempoDecorrido += 5;
+    if (tempoDecorrido > 100)
+    {
+      tempoDecorrido = 0;
+      delay(10000);
+    }
+  }
+  return tempoDecorrido;
 }
