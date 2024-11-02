@@ -3,7 +3,7 @@
 #define UMIDADE_MIN 760 // Valor mínimo do sensor
 #define UMIDADE_MAX 880 // Valor máximo do sensor
 #define MAX_MEDIDAS_SENSOR 10
-#define INTERVALO 100 // 100 ms
+#define INTERVALO 1000 // 100 ms
 // Definição dos pinos
 #define PINO_SENSOR_UMIDADE A0
 #define PINO_RELE 7
@@ -63,11 +63,11 @@ void loop()
 
     if (umidade >= 30)
     {
-      digitalWrite(PINO_RELE, LOW);
+      digitalWrite(PINO_RELE, HIGH);
     }
     else
     {
-      digitalWrite(PINO_RELE, HIGH);
+      digitalWrite(PINO_RELE, LOW);
     }
   }
 
@@ -146,7 +146,7 @@ int simularSensor()
     if (tempoDecorrido > 100)
     {
       tempoDecorrido = 0;
-      delay(10000);
+      delay(5000);
     }
   }
   return tempoDecorrido;
